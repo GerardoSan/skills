@@ -9,6 +9,7 @@ Mi enfoque se centra en:
 Arquitecturas resilientes, seguras y costo-eficientes
 Infraestructura como código con Terraform
 Automatización de operaciones (AIOps)
+Data Engineering y pipelines de datos
 Integración de IA en procesos IT (RAG, agentes, clasificación de incidentes)
 Gobierno cloud y optimización (FinOps + Well-Architected)
 
