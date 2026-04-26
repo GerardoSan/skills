@@ -1,0 +1,75 @@
+name: 'Build and Push Docker Image'
+
+on:
+  push:
+    branches: [ main ]
+    paths: [ 'app/**' ]
+  workflow_dispatch:
+
+env:
+  GCP_PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
+  IMAGE_NAME: python-web-app
+  REGISTRY: gcr.io
+
+jobs:
+  build-and-push:
+    name: 'Build and Push'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: 'read'
+      id-token: 'write'
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+
+    - name: Authenticate to Google Cloud
+      uses: 'google-github-actions/auth@v2'
+      with:
+        workload_identity_provider: '${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}'
+        service_account: '${{ secrets.GCP_SERVICE_ACCOUNT }}'
+
+    - name: Setup Google Cloud CLI
+      uses: 'google-github-actions/setup-gcloud@v2'
+      with:
+        project_id: ${{ env.GCP_PROJECT_ID }}
+
+    - name: Configure Docker for GCR
+      run: |
+        gcloud auth configure-docker ${{ env.REGISTRY }}
+
+    - name: Build Docker image
+      working-directory: ./app
+      run: |
+        docker build -t ${{ env.IMAGE_NAME }} .
+
+    - name: Tag and push Docker image
+      working-directory: ./app
+      run: |
+        # Get commit SHA for unique tag
+        IMAGE_TAG=$(echo ${{ github.sha }} | cut -c1-7)
+        
+        # Tag with latest and commit SHA
+        docker tag ${{ env.IMAGE_NAME }} ${{ env.REGISTRY }}/${{ env.GCP_PROJECT_ID }}/${{ env.IMAGE_NAME }}:latest
+        docker tag ${{ env.IMAGE_NAME }} ${{ env.REGISTRY }}/${{ env.GCP_PROJECT_ID }}/${{ env.IMAGE_NAME }}:$IMAGE_TAG
+        
+        # Push both tags
+        docker push ${{ env.REGISTRY }}/${{ env.GCP_PROJECT_ID }}/${{ env.IMAGE_NAME }}:latest
+        docker push ${{ env.REGISTRY }}/${{ env.GCP_PROJECT_ID }}/${{ env.IMAGE_NAME }}:$IMAGE_TAG
+        
+        echo "Pushed images:"
+        echo "- ${{ env.REGISTRY }}/${{ env.GCP_PROJECT_ID }}/${{ env.IMAGE_NAME }}:latest"
+        echo "- ${{ env.REGISTRY }}/${{ env.GCP_PROJECT_ID }}/${{ env.IMAGE_NAME }}:$IMAGE_TAG"
+
+    - name: Update Kubernetes deployment
+      run: |
+        # Update deployment with new image tag
+        IMAGE_TAG=$(echo ${{ github.sha }} | cut -c1-7)
+        sed -i "s|image: gcr.io/your-project-id/python-web-app:latest|image: ${{ env.REGISTRY }}/${{ env.GCP_PROJECT_ID }}/${{ env.IMAGE_NAME }}:$IMAGE_TAG|g" k8s/deployment.yaml
+        
+        # Commit and push changes
+        git config --local user.email "action@github.com"
+        git config --local user.name "GitHub Action"
+        git add k8s/deployment.yaml
+        git commit -m "chore: update deployment image to $IMAGE_TAG" || true
+        git push
