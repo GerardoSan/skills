@@ -1,4 +1,4 @@
-##💡 Enrique Sánchez | Cloud Architect | AIOps | Multi-Cloud
+## Enrique Sánchez | Cloud Architect | AIOps | Multi-Cloud
 
 Bienvenido a mi portafolio técnico.
 
