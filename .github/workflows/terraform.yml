@@ -90,19 +90,19 @@ jobs:
         cat tfplan.json | jq -r '.resource_changes[] | "\(.type): \(.change.actions[0])"' || true
 
     - name: Terraform Apply (Main Branch Only)
-      if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+      if: github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
       working-directory: ./terraform/GCP/GKE-OIDC/terraform
       run: |
         terraform apply -input=false -auto-approve tfplan
 
     - name: Update Kubernetes Config
-      if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+      if: github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
       working-directory: ./terraform/GCP/GKE-OIDC/terraform
       run: |
         gcloud container clusters get-credentials web-app-cluster --region ${{ env.GCP_REGION }}
 
     - name: Build and Push Docker Image
-      if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+      if: github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
       run: |
         # Configure Docker for GCR
         gcloud auth configure-docker gcr.io
@@ -114,7 +114,7 @@ jobs:
         docker push gcr.io/${{ env.GCP_PROJECT_ID }}/python-web-app:latest
 
     - name: Deploy Kubernetes Resources
-      if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+      if: github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
       run: |
         # Update deployment with correct image
         sed -i "s/your-project-id/${{ env.GCP_PROJECT_ID }}/g" terraform/GCP/GKE-OIDC/k8s/deployment.yaml
