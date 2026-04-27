@@ -133,8 +133,14 @@ jobs:
         kubectl apply -f terraform/GCP/GKE-OIDC/k8s/deployment.yaml
         kubectl apply -f terraform/GCP/GKE-OIDC/k8s/service.yaml
         
+        # Debug pods
+        echo "Pod status:"
+        kubectl get pods -l app=python-web-app
+        echo "Pod logs:"
+        kubectl logs -l app=python-web-app --tail=20 || true
+        
         # Wait for deployment
-        kubectl rollout status deployment/python-web-app --timeout=300s
+        kubectl rollout status deployment/python-web-app --timeout=600s
         
         # Get external IP
         EXTERNAL_IP=$(kubectl get service python-web-app-service -o jsonpath='{.status.loadBalancer.ingress[0].ip}')
