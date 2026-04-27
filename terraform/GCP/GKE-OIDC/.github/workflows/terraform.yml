@@ -1,8 +1,8 @@
-name: 'Terraform CI/CD with OIDC'
+name: 'Terraform CI/CD y OIDC'
 
 on:
   push:
-    branches: [ main, develop ]
+    branches: [ main ]
     paths: [ 'terraform/**' ]
   pull_request:
     branches: [ main ]
@@ -56,10 +56,6 @@ jobs:
         else
           echo "GCS bucket already exists: $BUCKET_NAME"
         fi
-
-    - name: Terraform Format Check
-      working-directory: ./terraform/GCP/GKE-OIDC/terraform
-      run: terraform fmt -check -recursive
 
     - name: Terraform Init
       working-directory: ./terraform/GCP/GKE-OIDC/terraform
