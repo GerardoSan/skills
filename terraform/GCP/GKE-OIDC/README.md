@@ -142,6 +142,9 @@ gcloud iam service-accounts add-iam-policy-binding \
 
 ## Resultados Esperados
 
+<img width="886" height="300" alt="image" src="https://github.com/user-attachments/assets/665fcb5c-93ad-4216-950e-6d6efc798b4f" />
+
+
 ### Evidencias de Funcionamiento
 - **Aplicación accesible**: LoadBalancer IP responde con página web
 - **Información del pod**: Muestra hostname, pod name y node name
