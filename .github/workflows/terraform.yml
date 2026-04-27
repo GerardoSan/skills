@@ -132,7 +132,7 @@ jobs:
         
         # Create PR comment with deployment info
         if [ "${{ github.event_name }}" == "pull_request" ]; then
-          gh pr comment ${{ github.event.number }} --body "🚀 **Deployment Complete**\n\nExternal IP: $EXTERNAL_IP\n\nAccess your app at: http://$EXTERNAL_IP"
+          gh pr comment ${{ github.event.number }} --body "**Deployment Complete**\n\nExternal IP: $EXTERNAL_IP\n\nAccess your app at: http://$EXTERNAL_IP"
         fi
 
     - name: Comment PR with Plan
@@ -144,7 +144,7 @@ jobs:
           const planOutput = fs.readFileSync('./terraform/GCP/GKE-OIDC/terraform/tfplan.json', 'utf8');
           const planSummary = JSON.parse(planOutput);
           
-          let comment = '## 🏗️ Terraform Plan Summary\n\n';
+          let comment = '##Terraform Plan Summary\n\n';
           
           if (planSummary.resource_changes && planSummary.resource_changes.length > 0) {
             const changes = planSummary.resource_changes.reduce((acc, change) => {
@@ -158,7 +158,7 @@ jobs:
               comment += `- ${action.toUpperCase()}: ${count} resources\n`;
             });
           } else {
-            comment += '✅ No changes detected\n';
+            comment += 'No changes detected\n';
           }
           
           github.rest.issues.createComment({
