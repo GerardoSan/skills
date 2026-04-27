@@ -129,6 +129,12 @@ jobs:
         # Update deployment with correct image
         sed -i "s|your-project-id|${{ env.GCP_PROJECT_ID }}|g" terraform/GCP/GKE-OIDC/k8s/deployment.yaml
         
+        # Create image pull secret
+        kubectl create secret docker-registry gcr-json-key \
+          --docker-server=${{ env.GCP_REGION }}-docker.pkg.dev \
+          --docker-username=_json_key \
+          --docker-password=$(cat $GOOGLE_APPLICATION_CREDENTIALS)
+
         # Apply Kubernetes manifests
         kubectl apply -f terraform/GCP/GKE-OIDC/k8s/deployment.yaml
         kubectl apply -f terraform/GCP/GKE-OIDC/k8s/service.yaml
