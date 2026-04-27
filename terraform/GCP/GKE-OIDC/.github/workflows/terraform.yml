@@ -1,8 +1,8 @@
-name: 'Terraform CI/CD with OIDC'
+name: 'Terraform CI/CD y OIDC'
 
 on:
   push:
-    branches: [ main, develop ]
+    branches: [ main ]
     paths: [ 'terraform/**' ]
   pull_request:
     branches: [ main ]
