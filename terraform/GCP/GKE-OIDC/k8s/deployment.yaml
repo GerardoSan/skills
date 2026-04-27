@@ -16,7 +16,7 @@ spec:
     spec:
       containers:
       - name: python-web-app
-        image: gcr.io/your-project-id/python-web-app:latest
+        image: us-central1-docker.pkg.dev/your-project-id/web-app/python-web-app:latest
         ports:
         - containerPort: 8080
         env:

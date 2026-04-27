@@ -104,20 +104,20 @@ jobs:
     - name: Build and Push Docker Image
       if: github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
       run: |
-        # Configure Docker for GCR
-        gcloud auth configure-docker gcr.io
+        # Configure Docker for Artifact Registry
+        gcloud auth configure-docker ${{ env.GCP_REGION }}-docker.pkg.dev
         
         # Build and push Docker image
         cd terraform/GCP/GKE-OIDC/app
         docker build -t python-web-app .
-        docker tag python-web-app gcr.io/${{ env.GCP_PROJECT_ID }}/python-web-app:latest
-        docker push gcr.io/${{ env.GCP_PROJECT_ID }}/python-web-app:latest
+        docker tag python-web-app ${{ env.GCP_REGION }}-docker.pkg.dev/${{ env.GCP_PROJECT_ID }}/web-app/python-web-app:latest
+        docker push ${{ env.GCP_REGION }}-docker.pkg.dev/${{ env.GCP_PROJECT_ID }}/web-app/python-web-app:latest
 
     - name: Deploy Kubernetes Resources
       if: github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
       run: |
         # Update deployment with correct image
-        sed -i "s/your-project-id/${{ env.GCP_PROJECT_ID }}/g" terraform/GCP/GKE-OIDC/k8s/deployment.yaml
+        sed -i "s|your-project-id|${{ env.GCP_PROJECT_ID }}|g" terraform/GCP/GKE-OIDC/k8s/deployment.yaml
         
         # Apply Kubernetes manifests
         kubectl apply -f terraform/GCP/GKE-OIDC/k8s/deployment.yaml
