@@ -1,77 +1,155 @@
-# Cluster GKE con Aplicación Python en Kubernetes
+# Cluster GKE con Aplicación Python en Kubernetes - CI/CD con OIDC
 
 ## Objetivo
-Desplegar una infraestructura en Google Cloud Platform (GCP) con un cluster de Kubernetes que contiene 2 nodos, cada uno ejecutando un pod con una página web sencilla en Python.
+Desplegar una infraestructura completa en Google Cloud Platform (GCP) con un cluster de Kubernetes que ejecuta una aplicación web Python, utilizando GitHub Actions con autenticación OIDC para CI/CD automatizado.
 
 ## Caso de uso
-Demostración de despliegue de aplicaciones web en Kubernetes con alta disponibilidad y balanceo de carga.
+Demostración de infraestructura como código con despliegue automatizado, mostrando mejores prácticas de DevOps en la nube.
 
 ## Arquitectura
-- **Infraestructura**: Terraform para GCP
-- **Cluster**: Google Kubernetes Engine (GKE) con 2 nodos
-- **Aplicación**: Flask (Python) con página web responsive
-- **Contenerización**: Docker
+- **Infraestructura**: Terraform modular para GCP
+- **Cluster**: Google Kubernetes Engine (GKE) con 1 nodo (escalable)
+- **Aplicación**: Flask (Python) con información del pod y health check
+- **Contenerización**: Docker con imagen optimizada
+- **Registry**: Google Artifact Registry (reemplazo de GCR)
+- **CI/CD**: GitHub Actions con Workload Identity Federation (OIDC)
 - **Exposición**: LoadBalancer Service
-- **Replicas**: 2 pods (1 por nodo)
+- **State Management**: Terraform state en Google Cloud Storage
 
-## Requisitos
-- Cuenta de GCP con billing habilitado
-- Google Cloud CLI instalado
-- Terraform instalado
-- Docker instalado
-- kubectl instalado
+## Componentes del Proyecto
+
+### Estructura de Directorios
+```
+terraform/GCP/GKE-OIDC/
+├── terraform/
+│   ├── main.tf              # Configuración principal de GKE
+│   ├── variables.tf         # Variables de entrada
+│   ├── outputs.tf          # Salidas del despliegue
+├── app/
+│   ├── app.py             # Aplicación Flask
+│   ├── requirements.txt     # Dependencias Python
+│   └── Dockerfile         # Definición de imagen
+├── k8s/
+│   ├── deployment.yaml     # Deployment de Kubernetes
+│   └── service.yaml       # Service LoadBalancer
+├── .github/
+│   └── workflows/
+│       └── terraform.yml   # CI/CD de infraestructura
+```
+
+### Infraestructura Terraform
+- **Cluster GKE**: Con networking policies y addons configurados
+- **Node Pool**: Máquinas e2-medium con disco estándar
+- **Security**: Workload Identity Federation sin secrets estáticos
+- **State Management**: Backend en GCS con versionamiento
+
+### Aplicación Python
+- **Framework**: Flask con endpoints `/` y `/health` 
+- **Información**: Muestra hostname, pod name y node name
+- **Health Check**: Endpoint `/health` para monitoreo
+- **Recursos**: Límites de CPU y memoria definidos
+
+### CI/CD Pipeline
+- **Trigger**: Push a rama main
+- **Autenticación**: OIDC con Workload Identity Federation
+- **Steps**: Terraform → Docker → Kubernetes Deploy
+- **Registry**: Google Artifact Registry
+- **Secrets Management**: Sin credenciales estáticas
 
 ## Implementación
 
-### 1. Configurar variables de Terraform
+### Opción 1: GitHub Actions CI/CD (Recomendado)
+
+#### Paso 1: Configurar Workload Identity Federation
+
+**Crear el pool:**
 ```bash
-cd cloud/terraform
-# Editar variables.tf con tu project_id
+gcloud iam workload-identity-pools create github-gcp \
+  --project=$PROJECT_ID \
+  --location=global \
+  --display-name="GitHub Pool"
 ```
 
-### 2. Desplegar infraestructura
+**Crear el provider:**
 ```bash
-terraform init
-terraform plan
-terraform apply
+gcloud iam workload-identity-pools providers create-oidc github \
+  --project=$PROJECT_ID \
+  --location=global \
+  --workload-identity-pool=github-gcp \
+  --issuer-uri="https://token.actions.githubusercontent.com" \
+  --attribute-mapping="google.subject=assertion.sub,attribute.repository=assertion.repository"
 ```
 
-### 3. Construir y subir imagen Docker
+**Verificación:**
+Consola GCP → Workload Identity Pool creado
+
+**Paso 2: Vincular GitHub con Service Account**
 ```bash
-cd ../app
-docker build -t python-web-app .
-docker tag python-web-app gcr.io/your-project-id/python-web-app:latest
-docker push gcr.io/your-project-id/python-web-app:latest
+gcloud iam service-accounts add-iam-policy-binding \
+"github@$PROJECT_ID.iam.gserviceaccount.com" \
+--role="roles/iam.workloadIdentityUser" \
+--member="principalSet://iam.googleapis.com/projects/PROJECT_NUMBER/locations/global/workloadIdentityPools/github-gcp/attribute.repository/GerardoSan/skills"
 ```
 
-### 4. Configurar kubectl y desplegar aplicación
-```bash
-gcloud container clusters get-credentials web-app-cluster --region us-central1
-cd ../k8s
-# Actualizar deployment con tu project_id
-sed -i 's/your-project-id/tu-project-id/g' deployment.yaml
-kubectl apply -f deployment.yaml
-kubectl apply -f service.yaml
-```
+#### Prerrequisitos
+1. **Workload Identity Federation**: Configurado con los comandos anteriores
+2. **GitHub Secrets**:
+   - `GCP_PROJECT_ID`: Tu ID de proyecto GCP
+   - `GCP_WORKLOAD_IDENTITY_PROVIDER`: ID del provider (output del script)
+   - `GCP_SERVICE_ACCOUNT`: Email del service account
+3. **Activar Workflow**:
+   - Hacer push a la rama main
+   - O ejecutar manualmente desde GitHub Actions
 
-### 5. Obtener IP externa
-```bash
-kubectl get service python-web-app-service --watch
-```
+#### Flujo Automático
+1. **Terraform Apply**: Crea/actualiza infraestructura
+2. **Docker Build**: Construye y sube imagen a Artifact Registry
+3. **Kubernetes Deploy**: Despliega aplicación con la nueva imagen
+4. **Health Check**: Verifica que los pods estén funcionando
 
-## Buenas prácticas
-- Uso de límites de recursos para los pods
-- Variables de entorno inyectadas desde Kubernetes
-- Health check endpoint incluido
-- Imágenes optimizadas (slim Python)
-- Separación de configuración por entorno
+## Seguridad
 
-## Riesgos
-- Costos asociados a GCP resources
-- Seguridad de credenciales de GCP
-- Gestión de imágenes Docker en registry
+### Workload Identity Federation
+- **Sin secrets estáticos**: Autenticación temporal con tokens OIDC
+- **Principio de mínimo privilegio**: Service account con permisos específicos
+- **Rotación automática**: Tokens de corta duración
 
-## Evidencias
-- Página web accesible vía LoadBalancer IP
-- 2 pods corriendo en nodos diferentes
-- Información de hostname y pod desplegada
+## Costos Estimados
+
+### Recursos Mensuales (us-central1)
+- **GKE Cluster**: ~$10 (management fee)
+- **Nodo e2-medium**: ~$15 (1 nodo x 730 horas)
+- **LoadBalancer**: ~$18 (1 LB x 730 horas)
+- **Artifact Registry**: ~$5 (storage + egress)
+- **GCS Storage**: ~$1 (Terraform state)
+
+**Total estimado**: ~$49/mes
+
+## Referencias y Documentación
+
+### Enlaces Útiles
+- [Google Kubernetes Engine](https://cloud.google.com/kubernetes-engine)
+- [Artifact Registry](https://cloud.google.com/artifact-registry)
+- [GitHub Actions OIDC](https://docs.github.com/en/actions/deployment/security-hardening-your-deployments/configuring-openid-connect-in-cloud-providers)
+- [Workload Identity Federation](https://cloud.google.com/iam/docs/workload-identity-federation)
+
+### Mejores Prácticas
+- **Infrastructure as Code**: Todo versionado en Git
+- **CI/CD Pipeline**: Despliegues automatizados y consistentes
+- **Security First**: OIDC, principios de mínimo privilegio
+- **Observability**: Logs, métricas y alertas
+- **Cost Optimization**: Recursos apropiados y escalado automático
+
+## Resultados Esperados
+
+### Evidencias de Funcionamiento
+- **Aplicación accesible**: LoadBalancer IP responde con página web
+- **Información del pod**: Muestra hostname, pod name y node name
+- **Health check**: Endpoint `/health` responde correctamente
+- **Alta disponibilidad**: LoadBalancer distribuye tráfico
+- **CI/CD funcional**: Pipeline automatizado funciona
+- **Seguridad implementada**: OIDC sin secrets estáticos
+
+---
+
+**Proyecto implementado exitosamente con infraestructura moderna, seguridad avanzada y automatización completa.** 
