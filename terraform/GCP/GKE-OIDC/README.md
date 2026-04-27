@@ -68,6 +68,9 @@ gcloud iam workload-identity-pools create github-gcp \
   --project=$PROJECT_ID \
   --location=global \
   --display-name="GitHub Pool"
+
+<img width="886" height="901" alt="image" src="https://github.com/user-attachments/assets/ac82c4a7-8fdb-4ff8-879d-90f79b617ca6" />
+
 ```
 
 **Crear el provider:**
@@ -79,6 +82,8 @@ gcloud iam workload-identity-pools providers create-oidc github \
   --issuer-uri="https://token.actions.githubusercontent.com" \
   --attribute-mapping="google.subject=assertion.sub,attribute.repository=assertion.repository"
 ```
+<img width="845" height="922" alt="image" src="https://github.com/user-attachments/assets/56282a25-706e-437c-a6d8-4c2af3a6d851" />
+
 
 **Verificación:**
 Consola GCP → Workload Identity Pool creado
@@ -90,6 +95,8 @@ gcloud iam service-accounts add-iam-policy-binding \
 --role="roles/iam.workloadIdentityUser" \
 --member="principalSet://iam.googleapis.com/projects/PROJECT_NUMBER/locations/global/workloadIdentityPools/github-gcp/attribute.repository/GerardoSan/skills"
 ```
+<img width="886" height="346" alt="image" src="https://github.com/user-attachments/assets/1c8555c1-a763-409d-9981-d6f015ac09ee" />
+
 
 #### Prerrequisitos
 1. **Workload Identity Federation**: Configurado con los comandos anteriores
@@ -142,16 +149,15 @@ gcloud iam service-accounts add-iam-policy-binding \
 
 ## Resultados Esperados
 
+
+<img width="886" height="375" alt="image" src="https://github.com/user-attachments/assets/7bbaeeff-adce-42ee-8667-cf0a9c1299b4" />
+
+
+
 <img width="886" height="300" alt="image" src="https://github.com/user-attachments/assets/665fcb5c-93ad-4216-950e-6d6efc798b4f" />
 
 
-### Evidencias de Funcionamiento
-- **Aplicación accesible**: LoadBalancer IP responde con página web
-- **Información del pod**: Muestra hostname, pod name y node name
-- **Health check**: Endpoint `/health` responde correctamente
-- **Alta disponibilidad**: LoadBalancer distribuye tráfico
-- **CI/CD funcional**: Pipeline automatizado funciona
-- **Seguridad implementada**: OIDC sin secrets estáticos
+
 
 ---
 
