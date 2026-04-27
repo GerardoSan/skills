@@ -145,8 +145,10 @@ jobs:
         echo "Pod logs:"
         kubectl logs -l app=python-web-app --tail=20 || true
         
-        # Wait for deployment
-        kubectl rollout status deployment/python-web-app --timeout=600s
+        # Wait for deployment with extended timeout
+        echo "Waiting for pods to be ready..."
+        sleep 30  # Give time for image pull
+        kubectl rollout status deployment/python-web-app --timeout=900s
         
         # Get external IP
         EXTERNAL_IP=$(kubectl get service python-web-app-service -o jsonpath='{.status.loadBalancer.ingress[0].ip}')

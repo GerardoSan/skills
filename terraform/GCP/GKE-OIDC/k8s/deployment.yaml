@@ -18,7 +18,7 @@ spec:
       - name: gcr-json-key
       containers:
       - name: python-web-app
-        image: us-central1-docker.pkg.dev/your-project-id/web-app/python-web-app:latest
+        image: us-central1-docker.pkg.dev/project-03383fe2-d85a-4d7c-bea/web-app/python-web-app:latest
         ports:
         - containerPort: 8080
         env:
