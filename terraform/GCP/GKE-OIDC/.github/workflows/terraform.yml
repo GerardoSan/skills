@@ -57,14 +57,6 @@ jobs:
           echo "GCS bucket already exists: $BUCKET_NAME"
         fi
 
-    - name: Terraform Format
-      working-directory: ./terraform/GCP/GKE-OIDC/terraform
-      run: terraform fmt -recursive
-
-    - name: Terraform Format Check
-      working-directory: ./terraform/GCP/GKE-OIDC/terraform
-      run: terraform fmt -check -recursive
-
     - name: Terraform Init
       working-directory: ./terraform/GCP/GKE-OIDC/terraform
       run: |
