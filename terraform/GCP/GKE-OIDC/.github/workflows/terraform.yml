@@ -1,0 +1,173 @@
+name: 'Terraform CI/CD with OIDC'
+
+on:
+  push:
+    branches: [ main, develop ]
+    paths: [ 'terraform/**' ]
+  pull_request:
+    branches: [ main ]
+    paths: [ 'terraform/**' ]
+  workflow_dispatch:
+
+env:
+  TF_VERSION: '1.5.7'
+  GCP_PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
+  GCP_REGION: 'us-central1'
+
+jobs:
+  terraform:
+    name: 'Terraform'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: 'read'
+      id-token: 'write'
+      pull-requests: 'write'
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+
+    - name: Setup Terraform
+      uses: hashicorp/setup-terraform@v3
+      with:
+        terraform_version: ${{ env.TF_VERSION }}
+        terraform_wrapper: false
+
+    - name: Authenticate to Google Cloud
+      id: 'auth'
+      uses: 'google-github-actions/auth@v2'
+      with:
+        workload_identity_provider: '${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}'
+        service_account: '${{ secrets.GCP_SERVICE_ACCOUNT }}'
+
+    - name: Setup Google Cloud CLI
+      uses: 'google-github-actions/setup-gcloud@v2'
+      with:
+        project_id: ${{ env.GCP_PROJECT_ID }}
+
+    - name: Create GCS Bucket for State (if not exists)
+      run: |
+        BUCKET_NAME="terraform-state-${{ env.GCP_PROJECT_ID }}"
+        if ! gsutil ls "gs://$BUCKET_NAME" > /dev/null 2>&1; then
+          echo "Creating GCS bucket: $BUCKET_NAME"
+          gsutil mb -p ${{ env.GCP_PROJECT_ID }} -l ${{ env.GCP_REGION }} "gs://$BUCKET_NAME"
+          gsutil versioning set on "gs://$BUCKET_NAME"
+          gsutil iam ch serviceAccount:${{ secrets.GCP_SERVICE_ACCOUNT }}:objectAdmin "gs://$BUCKET_NAME"
+        else
+          echo "GCS bucket already exists: $BUCKET_NAME"
+        fi
+
+    - name: Terraform Format Check
+      working-directory: ./terraform/GCP/GKE-OIDC/terraform
+      run: terraform fmt -check -recursive
+
+    - name: Terraform Init
+      working-directory: ./terraform/GCP/GKE-OIDC/terraform
+      run: |
+        cat > backend_override.tf << EOF
+        terraform {
+          backend "gcs" {
+            bucket = "terraform-state-${{ env.GCP_PROJECT_ID }}"
+            prefix = "gke-cluster"
+          }
+        }
+        EOF
+        terraform init -input=false
+
+    - name: Terraform Validate
+      working-directory: ./terraform/GCP/GKE-OIDC/terraform
+      run: terraform validate
+
+    - name: Terraform Plan
+      working-directory: ./terraform/GCP/GKE-OIDC/terraform
+      run: |
+        terraform plan -input=false \
+          -var="project_id=${{ env.GCP_PROJECT_ID }}" \
+          -var="region=${{ env.GCP_REGION }}" \
+          -out=tfplan
+      continue-on-error: true
+
+    - name: Terraform Plan Summary
+      working-directory: ./terraform/GCP/GKE-OIDC/terraform
+      run: |
+        terraform show -json tfplan > tfplan.json
+        cat tfplan.json | jq -r '.resource_changes[] | "\(.type): \(.change.actions[0])"' || true
+
+    - name: Terraform Apply (Main Branch Only)
+      if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+      working-directory: ./terraform/GCP/GKE-OIDC/terraform
+      run: |
+        terraform apply -input=false -auto-approve tfplan
+
+    - name: Update Kubernetes Config
+      if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+      working-directory: ./terraform/GCP/GKE-OIDC/terraform
+      run: |
+        gcloud container clusters get-credentials web-app-cluster --region ${{ env.GCP_REGION }}
+
+    - name: Build and Push Docker Image
+      if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+      run: |
+        # Configure Docker for GCR
+        gcloud auth configure-docker gcr.io
+        
+        # Build and push Docker image
+        cd terraform/GCP/GKE-OIDC/app
+        docker build -t python-web-app .
+        docker tag python-web-app gcr.io/${{ env.GCP_PROJECT_ID }}/python-web-app:latest
+        docker push gcr.io/${{ env.GCP_PROJECT_ID }}/python-web-app:latest
+
+    - name: Deploy Kubernetes Resources
+      if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+      run: |
+        # Update deployment with correct image
+        sed -i "s/your-project-id/${{ env.GCP_PROJECT_ID }}/g" terraform/GCP/GKE-OIDC/k8s/deployment.yaml
+        
+        # Apply Kubernetes manifests
+        kubectl apply -f terraform/GCP/GKE-OIDC/k8s/deployment.yaml
+        kubectl apply -f terraform/GCP/GKE-OIDC/k8s/service.yaml
+        
+        # Wait for deployment
+        kubectl rollout status deployment/python-web-app --timeout=300s
+        
+        # Get external IP
+        EXTERNAL_IP=$(kubectl get service python-web-app-service -o jsonpath='{.status.loadBalancer.ingress[0].ip}')
+        echo "External IP: $EXTERNAL_IP"
+        
+        # Create PR comment with deployment info
+        if [ "${{ github.event_name }}" == "pull_request" ]; then
+          gh pr comment ${{ github.event.number }} --body "🚀 **Deployment Complete**\n\nExternal IP: $EXTERNAL_IP\n\nAccess your app at: http://$EXTERNAL_IP"
+        fi
+
+    - name: Comment PR with Plan
+      if: github.event_name == 'pull_request'
+      uses: actions/github-script@v7
+      with:
+        script: |
+          const fs = require('fs');
+          const planOutput = fs.readFileSync('./terraform/GCP/GKE-OIDC/terraform/tfplan.json', 'utf8');
+          const planSummary = JSON.parse(planOutput);
+          
+          let comment = '## 🏗️ Terraform Plan Summary\n\n';
+          
+          if (planSummary.resource_changes && planSummary.resource_changes.length > 0) {
+            const changes = planSummary.resource_changes.reduce((acc, change) => {
+              const action = change.change.actions[0];
+              acc[action] = (acc[action] || 0) + 1;
+              return acc;
+            }, {});
+            
+            comment += '### Resource Changes:\n';
+            Object.entries(changes).forEach(([action, count]) => {
+              comment += `- ${action.toUpperCase()}: ${count} resources\n`;
+            });
+          } else {
+            comment += '✅ No changes detected\n';
+          }
+          
+          github.rest.issues.createComment({
+            issue_number: context.issue.number,
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+            body: comment
+          });
