@@ -99,6 +99,11 @@ jobs:
       if: github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
       working-directory: ./terraform/GCP/GKE-OIDC/terraform
       run: |
+        # Install gke-gcloud-auth-plugin
+        sudo apt-get update
+        sudo apt-get install -y google-cloud-cli-gke-gcloud-auth-plugin
+        
+        # Get cluster credentials
         gcloud container clusters get-credentials web-app-cluster --region ${{ env.GCP_REGION }}
 
     - name: Build and Push Docker Image
