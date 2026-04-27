@@ -32,3 +32,4 @@ Cada skill contiene:
 ## Skills destacadas
 
 - Pipelines CI/CD con Workload Identity
+- Cluster GKE con aplicación Python en Kubernetes
